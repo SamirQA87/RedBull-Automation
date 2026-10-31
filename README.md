@@ -1,21 +1,42 @@
-# QA Automation - Devices Command API
+# QA Automation: Devices app (API + UI)
 
-Automated regression test for the Devices Command API, written with Playwright (API testing mode).
+Playwright + TypeScript regression tests for the Devices app. Two layers:
+
+- **API tests** (`tests/api`) use Playwright's request API, with no browser.
+- **UI tests** (`tests/ui`) drive the app in Chromium through a page object.
 
 ## What it covers
-Bug #16 - a command sent to an OFFLINE device should return a clear 4xx.
-The endpoint currently returns 500 with a stack trace, so the test FAILS by design:
-the failure is the evidence of the bug. It will pass once #16 is fixed.
+
+| Test | Type | Status |
+|------|------|--------|
+| Sign-in returns a token for valid credentials | API | stable |
+| Sign-in rejects a wrong password with a 4xx and no token | API | stable |
+| Command to an OFFLINE device returns a clear 4xx, no stack trace (**bug #16**) | API | `@known-bug` |
+| Changing a filter resets pagination to page 1 (**bug #12**) | UI | `@known-bug` |
+
+**Known-bug tests** assert the *correct* behaviour, so they FAIL while the bug exists and the failure is the evidence. They PASS once the bug is fixed, which makes them regression tests. They are tagged `@known-bug` so they run separately from the stable suite.
+
+- Bug #16: the endpoint returns 500 with a stack trace instead of a 4xx.
+- Bug #12: changing a filter keeps the old page number, giving an empty list such as "Page 6 of 3".
 
 ## Setup
+
     npm install
-    copy .env.example .env
+    npx playwright install chromium
+    cp .env.example .env        # Windows: copy .env.example .env, then fill in the values
 
 ## Run
-    npx playwright test
-    npx playwright show-report
+
+    npm run test:stable         # gating suite, should be green
+    npm run test:known-bugs     # reproduces the open bugs, red until they are fixed
+    npm test                    # everything
+    npm run report              # open the HTML report
+    npm run typecheck
 
 ## Design notes
-- Uses Playwright request API (no browser) - the endpoint is backend-only.
-- Signs in automatically to obtain a fresh token; no secrets are committed (.env is git-ignored).
-- Asserts the correct behaviour, so the test serves as a regression check after the fix.
+
+- **Fixtures** (`fixtures/`): `authedApi` signs in once per test and returns an authenticated API client; `devicesPage` returns a signed-in page object. Tests start at the behaviour under test.
+- **Page Object** (`pages/DevicesPage.ts`): locators and actions for sign-in, pagination and filters live in one place.
+- **No hard sleeps.** Waiting relies on Playwright auto-waiting and web-first assertions.
+- **No secrets in the repo.** Credentials come only from `.env` (git-ignored). The tests fail with a clear message if a variable is missing.
+- **CI** (`.github/workflows/tests.yml`): the stable suite gates the build; known-bug tests run in a separate, non-blocking job. Set `QA_EMAIL`, `QA_PASSWORD` and `OFFLINE_DEVICE_ID` as repository secrets.
